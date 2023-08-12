@@ -1,0 +1,7 @@
+﻿Bandpasses are saved in CSV files with this format:
+
+1. The first row contains the names of the columns
+2. The first column is an integer index starting from 1
+3. The second column contains the wavenumber, measured in cm⁻¹
+4. The third column contains the transmission coefficient, expressed as a pure number
+5. The fourth column either contains the uncertainty of the transmission coefficient or zero

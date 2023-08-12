@@ -1,0 +1,5 @@
+The spreadsheet contains the orbital parameters, and it follows this layout:
+
+- Column A contains a short description of the datum
+- Column B contains the actual value of the datum
+- Column C contains the measurement unit of the datum (if applicable)

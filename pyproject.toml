@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "fill-db-with-planck-data"
+version = "0.1.0"
+description = "Fill an InstrumentDB instance with information from the Planck mission"
+authors = ["Maurizio Tomasi <maurizio.tomasi@unimi.it>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "fill_db_with_planck_data"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+requests = "^2.31.0"
+rich = "^13.5.2"
+astropy = "^5.3.1"
+pandas = "^2.0.3"
+matplotlib = "^3.7.2"
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.4.1"
+black = "^23.7.0"
+flake8 = "^6.1.0"
+pre-commit = "^3.3.3"

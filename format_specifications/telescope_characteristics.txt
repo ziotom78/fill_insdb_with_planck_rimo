@@ -1,0 +1,6 @@
+This document should detail how the characteristics of the telescope have been measured. Possible items that might
+be specified in this document are:
+
+- Reference frames used to define the placement of the telescope
+- Are the  parameters derived from a CAD or from measuring actual hardware?
+- Etc.

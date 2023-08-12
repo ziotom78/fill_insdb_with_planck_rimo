@@ -1,0 +1,4 @@
+# Planck 2013 Data Release
+
+The description of the instrument provided in this release
+corresponds to the Planck 2013 data release.
