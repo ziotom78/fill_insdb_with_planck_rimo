@@ -163,21 +163,31 @@ def save_bandpass_to_csv(
     output_file_path: Path,
     instrument: str,
 ) -> None:
+    import numpy as np
+
     wavenumber_key = {"LFI": "wavenumber_ghz", "HFI": "wavenumber_invcm"}
+
+    # We must convert NumPy arrays to Python lists here, because
+    # FITS files use big-endian byte ordering, which Pandas does
+    # not handle well
     data_dict = {
-        wavenumber_key[instrument]: hdu.data["WAVENUMBER"],
-        "transmission": hdu.data["TRANSMISSION"],
+        wavenumber_key[instrument]: list(hdu.data["WAVENUMBER"]),
+        "transmission": list(hdu.data["TRANSMISSION"]),
     }
 
     try:
-        data_dict["uncertainty"] = hdu.data["UNCERTAINTY"]
+        data_dict["uncertainty"] = list(hdu.data["UNCERTAINTY"])
     except KeyError:
         # HFI RIMO V3.00 does not contain the "UNCERTAINTY" column
-        data_dict["uncertainty"] = data_dict["transmission"] * 0.0
+        data_dict["uncertainty"] = list(np.array(data_dict["transmission"]) * 0.0)
 
     cur_bandpass = pd.DataFrame(data_dict)
 
-    cur_bandpass.to_csv(output_file_path)
+    # Filter out rows where the transmission is negligible: this
+    # saves a lot of disk space and produce better plots
+    data_to_save = cur_bandpass[cur_bandpass["transmission"] > 1e-9]
+
+    data_to_save.to_csv(output_file_path)
 
 
 def save_channel_bandpasses(
