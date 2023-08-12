@@ -9,7 +9,7 @@ from typing import Any
 
 import typing
 
-from httpinsdb import InstrumentDB
+from httpinsdb import InstrumentDB, InstrumentDBError
 
 # MIME type used for the bandpass plots
 SVG_MIME_TYPE = "image/svg+xml"
@@ -185,6 +185,24 @@ class ReleaseUploader:
         self.hfi_rimo_version = hfi_rimo_version
 
     def prepare_release(self):
+        # Check that the release was not already uploaded
+        try:
+            self.insdb.get(url=f"{self.insdb.server}/api/releases/{self.release_tag}")
+
+            # If we reach this line, it means that the GET
+            # request got completed successfully, and thus
+            # that the release is already present
+            raise ValueError(
+                f"error, release {self.release_tag} is already present in the database"
+            )
+        except InstrumentDBError as err:
+            if err.status_code == 404:  # HTTP 404: not found
+                # That's ok, we're happy that this release is not found
+                pass
+            else:
+                # Something else went wrong: propagate the exception
+                raise
+
         log.info(
             "creating release [bold]%s[/bold]", self.release_tag, extra={"markup": True}
         )
