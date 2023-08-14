@@ -43,8 +43,7 @@ The repository contains a number of Python scripts, whose purpose can be underst
     
     Once the script is executed successfully, here is the hierarchical tree of entities created by our script in InstrumentDB:
 
-    |![](demo_tree_folders.png)|
-    -
+    ![](demo_tree_folders.png)
     
     The script creates all the folders and sub-folders using the [Web API](https://instrumentdb.readthedocs.io/en/latest/webapi.html) provided by InstrumentDB and the Python [requests](https://pypi.org/project/requests/) package. Then, it uploads all the data files from the Planck 2013 release that were produced by `create_mock_files_from_PLA.py` (point 1).
 
@@ -138,8 +137,7 @@ To use the scripts named `create_planck*_release.py`, you must have a running in
 
 This is a view of the entity tree, partially expanded. The structure was created by `create_planck2013_release.py`:
 
-|![](demo_entity_tree.png)|
--
+![](demo_entity_tree.png)
 
 Note that we are running a custom version of InstrumentDB, so that the Planck logo is shown in the top-left corner of the page. See the folder [browse](https://github.com/ziotom78/planck_insdb_demo/tree/master/browse/static/browse) and [base_generic.html](https://github.com/ziotom78/planck_insdb_demo/blob/master/browse/templates/browse/base_generic.html) in the [planck_insdb_demo](https://github.com/ziotom78/planck_insdb_demo) repository to see how this can be done.
 
@@ -147,20 +145,18 @@ Note that we are running a custom version of InstrumentDB, so that the Planck lo
 
 If you open the quantity “bandpass” for the 30 GHz channel, you will see that the data file `bandpass030.csv` has been uploaded four times. The “Upload date” column reveals that the four versions were uploaded for the 2013, 2015, 2018, and 2021 data releases.
 
-|![](demo_bandpasses.png)|
--
+![](demo_bandpasses.png)
 
 Clicking on any of the files will show a plot of the bandpass. This was produced by the scripts `create_planck2013_release.py` and similar, using the [matplotlib](https://matplotlib.org/) library; the plots are kept by InstrumentDB as SVG files.
 
-|![](demo_bandpass_plot.png)|
--
+![](demo_bandpass_plot.png)
 
 
 ### The telescope
 
 This is a screenshot showing the details of the file containing the telescope specifications.
 
-|![](demo_telescope_characteristics.png)|
--
+![](demo_telescope_characteristics.png)
+
 
 Note that the file is referenced by the four releases `planck2013`, `planck2015`, `planck2018`, and `planck2021`, because the information stored in the file was applicable to all of them.
