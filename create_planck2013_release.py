@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 
-from pathlib import Path
+"""Create the Planck 2013 data release
+
+This scripts uses a lot of stuff from the `common.py`
+Python file. It creates the nested tree of entries
+in InstrumentDB, fills it with quantities, and then
+uploads the data files of the Planck 2013 release.
+"""
+
 from tempfile import TemporaryFile
 
 from common import (
@@ -26,6 +33,12 @@ REL_2013_DATE = "2013-03-11T00:00:00"
 
 
 class Release2013Uploader(ReleaseUploader):
+    """Class used to upload the Planck 2013 release
+
+    This class inherits `ReleaseUploader` and redefines the `.fill()`
+    method
+    """
+
     def fill(self):
         log.info("adding orbital parameters")
         self.add_data_file(

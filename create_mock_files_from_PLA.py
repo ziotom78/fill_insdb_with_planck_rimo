@@ -1,9 +1,23 @@
 #!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 
+"""Download the HFI/LFI RIMO files from the PLA and create mock data files
+
+This scripts connects to the Planck Legacy Archive site
+and downloads the FITS files containing the HFI/LFI
+Reduced Instrument MOdels (RIMO). Then, it scans their
+HDUs and saves the data found in a few of them into files
+under the `mock_data` folder.
+
+In a more realistic scenario, these data files should be
+gathered by the Instrument Model Team of the collaboration
+designing the instrument and kept in a safe place.
+"""
+
 from argparse import ArgumentParser
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 from pathlib import Path
 import re
@@ -25,10 +39,18 @@ log = configure_logger()
 
 @dataclass
 class Configuration:
+    """
+    Singleton class that stores the flags specified on the command line
+    """
+
+    # If `true`, RIMO files from the PLA will be downloaded even if
+    # they are already present locally in the sub-folder `pla_data`
     force_pla_file_overwrite: bool
 
 
 def parse_command_line() -> Configuration:
+    """Parse the command line switches and return a `Configuration` object"""
+
     parser = ArgumentParser(
         description="""
 Use the Planck Legacy Archive as a reference to build
@@ -94,18 +116,27 @@ def download_pla_files(conf: Configuration) -> None:
 
 
 def create_mock_folder_tree():
-    # Create the tree of folders that will contain the mock data:
-    #
-    # mock_data
-    # |
-    # +--- LFI
-    # |    +--- 1.10
-    # |    ⋮
-    # |
-    # +--- HFI
-    #      |
-    #      +--- 1.12
-    #      ⋮
+    """Create the tree of folders that will contain the mock data:
+
+    The folder will have the following shape:
+
+        mock_data
+        |
+        +--- LFI
+        |    +--- 1.10
+        |    ⋮
+        |
+        +--- HFI
+             |
+             +--- 1.12
+             ⋮
+
+    This does not match the tree of entities that will be created
+    within InstrumentDB, but it's not a problem: the tree of entities
+    must be designed in order to be easy to navigate, while the folder
+    we are creating here are easier to handle by the scripts
+    create_planck2013_release.py, create_planck2015_release.py, etc.
+    """
 
     MOCK_DATA_FOLDER.mkdir(exist_ok=True)
 
@@ -131,15 +162,23 @@ def find_rimo(instrument: str, version: str) -> Path:
 
 
 def retrieve_ellipticity(data):
-    # Some versions of the HFI RIMO use "ELLIPTICITY",
-    # others use "ELLIPTIC"… ☹
+    """Given a binary HDU, return the column containing the ellipticity
+
+    Some versions of the HFI RIMO use "ELLIPTICITY", others use
+    "ELLIPTIC"… ☹ Thus, we need this helper function to keep the
+    code for `save_hfi_focal_plane_to_json` easier to read.
+    """
+
+    #
     try:
         return data["ELLIPTICITY"]
     except KeyError:
         return data["ELLIPTIC"]
 
 
-def save_hfi_focal_plane_to_json(hdu: fits.BinTableHDU, output_file_path: Path):
+def save_hfi_focal_plane_to_json(hdu: fits.BinTableHDU, output_file_path: Path) -> None:
+    """Store HFI focal plane parameters into `output_file_path` (a JSON file)"""
+
     detector_parameters = hdu.data
     detector_parameters_df = pd.DataFrame(
         {
@@ -163,7 +202,13 @@ def save_bandpass_to_csv(
     output_file_path: Path,
     instrument: str,
 ) -> None:
-    import numpy as np
+    """
+    Given a HDU containing a bandpass, save it into a CSV file
+
+    This code should work both with LFI and HFI bandpasses. However,
+    beware that the measurement unit of the “wavenumber” is different:
+    LFI uses GHz, while HFI uses cm⁻¹!
+    """
 
     wavenumber_key = {"LFI": "wavenumber_ghz", "HFI": "wavenumber_invcm"}
 
@@ -196,6 +241,8 @@ def save_channel_bandpasses(
     freq_label: list[str],
     instrument: str,
 ) -> None:
+    """Save the frequency-averaged bandpasses"""
+
     for cur_frequency in freq_label:
         if cur_frequency.startswith("F"):
             # HFI frequencies start with an "F"
@@ -221,6 +268,8 @@ def save_detector_bandpasses(
     output_path: Path,
     regexp: str,
 ) -> None:
+    """Iterate over all the bandpasses in a RIMO file and save all of them"""
+
     name_regexp = re.compile(regexp)
     for cur_hdu in input_file:
         if match_obj := name_regexp.fullmatch(cur_hdu.name):
@@ -239,6 +288,8 @@ def save_detector_bandpasses(
 
 
 def create_hfi_mock_files(version: str) -> None:
+    """Given a HFI RIMO version, open the FIRST file and create all the mock files"""
+
     log.info("Processing HFI RIMO %s", version)
     with fits.open(find_rimo(instrument="HFI", version=version)) as input_file:
         # Depending on the version of the HFI RIMO file:
@@ -251,12 +302,16 @@ def create_hfi_mock_files(version: str) -> None:
         for focal_plane_key in ["DET_PARAMS", "CHANNEL PARAMETERS"]:
             if focal_plane_key not in input_file:
                 continue
+
             output_file_path = MOCK_DATA_FOLDER / "HFI" / version / "focal_plane.json"
             save_hfi_focal_plane_to_json(
                 hdu=input_file[focal_plane_key],
                 output_file_path=output_file_path,
             )
             log.info("focal plane information saved in '%s'", output_file_path)
+
+            # No need to continue the `for` loop, we have found what we were looking for
+            break
 
         save_channel_bandpasses(
             input_file=input_file,
@@ -291,6 +346,15 @@ def create_hfi_400_mock_files():
 def save_lfi_reduced_focal_plane_to_json(
     hdu: fits.BinTableHDU, output_file_path: Path
 ) -> None:
+    """Save the “reduced” focal plane definition for LFI
+
+    LFI RIMO files contain both a “full” and a “reduced” version
+    of the focal plane: the former contains information for all
+    the radiometers, while the latter only contains
+    frequency-averaged quantities (just 3 rows: 30 GHz,
+    40 GHz, and 70 GHz).
+    """
+
     focal_plane_df = pd.DataFrame(
         {
             "frequency": [x[0] for x in hdu.data["FREQUENCY"]],
@@ -312,6 +376,15 @@ def save_lfi_reduced_focal_plane_to_json(
 def save_lfi_full_focal_plane_to_json(
     hdu: fits.BinTableHDU, output_file_path: Path
 ) -> None:
+    """Save the “full” focal plane definition for LFI
+
+    LFI RIMO files contain both a “full” and a “reduced” version
+    of the focal plane: the former contains information for all
+    the radiometers, while the latter only contains
+    frequency-averaged quantities (just 3 rows: 30 GHz,
+    40 GHz, and 70 GHz).
+    """
+
     focal_plane_df = pd.DataFrame(
         {
             "detector": [x[0] for x in hdu.data["detector"]],
@@ -329,6 +402,8 @@ def save_lfi_full_focal_plane_to_json(
 
 
 def create_lfi_mock_files(version: str) -> None:
+    """Given a HFI RIMO version, open the FIRST file and create all the mock files"""
+
     log.info("Processing LFI RIMO %s", version)
 
     with fits.open(find_rimo(instrument="LFI", version=version)) as input_file:
@@ -342,6 +417,8 @@ def create_lfi_mock_files(version: str) -> None:
         log.info("reduced focal plane information saved in '%s'", output_file_path)
 
         if "CHANNEL_PARAMETERS" in input_file:
+            # Not all versions of the LFI RIMO file contain
+            # full focal plane information
             output_file_path = (
                 MOCK_DATA_FOLDER / "LFI" / version / "full_focal_plane.json"
             )
@@ -381,7 +458,7 @@ def create_lfi_400_mock_files() -> None:
     create_lfi_mock_files(version="4.00")
 
 
-def create_mock_files():
+def create_mock_files() -> None:
     create_mock_folder_tree()
 
     create_hfi_110_mock_files()

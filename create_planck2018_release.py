@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 
+"""Create the Planck 2018 data release
+
+This script should be executed *after* a successful completion of
+`create_planck2013_release.py`. It uploads data files from the 2018
+RIMO files into the tree of entities created for the 2013 data release.
+It is not necessary, although encouraged, that this script be executed
+*after* `create_planck2015_release.py` as well.
+"""
+
 from common import (
     configure_logger,
     create_release,

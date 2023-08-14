@@ -1,5 +1,11 @@
 # -*- encoding: utf-8 -*-
 
+"""Common functions and classes used by multiple scripts
+
+In this file we save all the functions and classes that
+are used by more than one script.
+"""
+
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from io import BufferedReader
@@ -14,12 +20,20 @@ from httpinsdb import InstrumentDB, InstrumentDBError
 # MIME type used for the bandpass plots
 SVG_MIME_TYPE = "image/svg+xml"
 
+# By default, we always connect to a local instance
+# of the InstrumentDB database
 DEFAULT_SERVER = "http://localhost:8000"
+
+# These are all sub-folders within this repository.
+# A few of them do not exist once the repository has
+# been cloned (e.g., `mock_data`): they will be created
+# automatically
 PLA_DATA_FOLDER = Path(__file__).parent / "pla_data"
 MOCK_DATA_FOLDER = Path(__file__).parent / "mock_data"
 PRE_LAUNCH_FOLDER = Path(__file__).parent / "pre_launch"
 RELEASE_DOCUMENT_PATH = Path(__file__).parent / "release_documents"
 
+# Dictionary associating a frequency number with the name of the detectors
 HFI_DETECTORS = {
     100: sorted([f"{num}-{pol}" for num in (1, 2, 3, 4) for pol in ("a", "b")]),
     143: sorted([f"{num}-{pol}" for num in (1, 2, 3, 4) for pol in ("a", "b")]),
@@ -33,6 +47,7 @@ HFI_DETECTORS = {
 }
 HFI_FREQUENCIES = list(HFI_DETECTORS.keys())
 
+# The same for LFI
 LFI_DETECTORS = {
     30: sorted([f"{num}{arm}" for num in range(27, 28 + 1) for arm in ("M", "S")]),
     44: sorted([f"{num}{arm}" for num in range(24, 26 + 1) for arm in ("M", "S")]),
@@ -40,12 +55,16 @@ LFI_DETECTORS = {
 }
 LFI_FREQUENCIES = list(LFI_DETECTORS.keys())
 
+# These are the labels used to identify frequencies in the RIMO files.
+# Alas, their format differ between HFI and LFI!
 HFI_BANDPASS_FREQ_LABEL = ["F100", "F143", "F217", "F353", "F545", "F857"]
 LFI_BANDPASS_FREQ_LABEL = ["030", "044", "070"]
 
 
 @dataclass
 class RimoFile:
+    """Details about a RIMO file downloaded from the PLA"""
+
     path: Path
     instrument: str
     version: str
@@ -93,10 +112,20 @@ def configure_logger():
 
 @dataclass
 class ConnectionConfiguration:
+    """Connection settings specified through the command line"""
+
     server: str
 
 
 def parse_connection_flags(description: str) -> ConnectionConfiguration:
+    """Read connection configuration from the command line"""
+
+    # In a real-world case, this code would probably have been
+    # originally put in create_planck2013_release.py. Then, once
+    # release 2015 was being prepared, the code was moved in
+    # `common.py` because the authors realized that it could have
+    # been reused without changes for the newer release.
+
     parser = ArgumentParser(description=description)
     parser.add_argument(
         "--server",
@@ -112,6 +141,8 @@ def parse_connection_flags(description: str) -> ConnectionConfiguration:
 
 
 def get_username_and_password() -> tuple[str, str]:
+    """Read username and password for InstrumentDB from file `credentials.ini`"""
+
     import configparser
 
     conf = configparser.ConfigParser()
@@ -123,6 +154,11 @@ def get_username_and_password() -> tuple[str, str]:
 def plot_bandpass(
     data_file_path: Path, output_file: typing.IO, image_format: str, instrument: str
 ) -> None:
+    """Use Matplotlib to create a plot of a bandpass
+
+    The plot is saved in SVG format and uploaded to InstrumentDB.
+    """
+
     from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas  # type: ignore
     from matplotlib.figure import Figure  # type: ignore
     import pandas as pd
@@ -148,6 +184,8 @@ def plot_bandpass(
     canvas.print_figure(output_file, format=image_format)
 
 
+# We need an instance of `log` in the implementation
+# of the classe `ReleaseUploader` (see below)
 log = configure_logger()
 
 
@@ -184,7 +222,15 @@ class ReleaseUploader:
         self.lfi_rimo_version = lfi_rimo_version
         self.hfi_rimo_version = hfi_rimo_version
 
-    def prepare_release(self):
+    def prepare_release(self) -> None:
+        """Prepare stuff before uploading data files for a new release
+
+        This code is executed *before* the data files of the new release
+        are actually being uploded. The purpose of this method is to
+        check that the release was not already uploaded by mistake and
+        to inform the user that the upload is going to start.
+        """
+
         # Check that the release was not already uploaded
         try:
             self.insdb.get(url=f"{self.insdb.server}/api/releases/{self.release_tag}")
@@ -207,7 +253,9 @@ class ReleaseUploader:
             "creating release [bold]%s[/bold]", self.release_tag, extra={"markup": True}
         )
 
-    def finish_release(self):
+    def finish_release(self) -> None:
+        """This method is called once the new data files have been uploaded"""
+
         log.info(
             "finalizing release [bold]%s[/bold]",
             self.release_tag,
@@ -231,7 +279,14 @@ class ReleaseUploader:
         plot_file: BufferedReader | None = None,
         plot_mime_type: str | None = None,
     ):
-        """Add a new data file to the current release"""
+        """Add a new data file to the current release
+
+        This is a wrapper around the InstrumentDB.create_data_file method.
+        It keeps a list of the URLs of the data files that have been
+        successfully uploaded, so that the method `.finish_release()`
+        will be able to tag the new release.
+        """
+
         self.data_file_urls.append(
             self.insdb.create_data_file(
                 quantity=quantity,
@@ -245,7 +300,13 @@ class ReleaseUploader:
         )
 
     def add_data_file_reference(self, release: str, path: str):
-        """Add to the current release a reference to an older data file"""
+        """Add to the current release a reference to an older data file
+
+        This method is used whenever a new release references
+        a file from an older release instead of uploading a new
+        version of it. This is the case of the Excel file containing
+        the telescope caracteristics, for example."""
+
         self.data_file_urls.append(
             self.insdb.get_data_file_from_release(
                 release=release,
@@ -253,17 +314,37 @@ class ReleaseUploader:
             )
         )
 
-    def fill(self):
+    def fill(self) -> None:
+        """Upload the data files"""
+
+        # Of course, we have nothing to do here! The method `.fill`
+        # is meant to be overridden by derived classes
         pass
 
-    def create_release(self):
+    def create_release(self) -> None:
+        """Create the new release"""
+
         self.prepare_release()
         self.fill()
         self.finish_release()
 
     def add_focal_plane_information(self):
+        """Upload focal plane information to the InstrumentDB database
+
+        This function was originally part of the script
+        `create_planck2013_release.py`. It was moved here
+        once the Planck team realized that the code would
+        have been exactly the same for the 2015, 2018,
+        and 2021 releases.
+        """
+
         log.info("adding focal plane characteristics")
 
+        # We must perform *three* uploads:
+        # 1. The LFI “reduced” data file, containing just the 30, 44, and 70 GHJz focal
+        #    plane parameters
+        # 2. The LFI “full” data file
+        # 3. The HFI data file, whose structure is the same as the LFI “full” data file
         for instrument, rimo_version, file_name, quantity in [
             (
                 "LFI",
@@ -288,7 +369,20 @@ class ReleaseUploader:
 
 
 class LaterReleaseUploader(ReleaseUploader):
+    """Class to upload files from the 2015, 2018, and 2021 data releases
+
+    Once the `create_planck2015_release.py` was created, the Planck
+    team realized that `create_planck2018_release.py` would have
+    shared several methods, which were however *not* needed for
+    the 2013 data release. Thus, they decided to move those parts of
+    the code in this class, which is used as the ancestor for
+    the classes `Release2015Uploader`, `Release2018Uploader`,
+    and `Release2021Uploader`.
+    """
+
     def add_reference_to_payload_files(self):
+        """Add references to the payload files in the current release"""
+
         # Nothing was changed for the payload files, as they contain
         # measurements done before the launch
 
@@ -380,6 +474,8 @@ def create_release(
     lfi_rimo_version: str,
     hfi_rimo_version: str,
 ) -> None:
+    """Use an instance of a `Release*Uploader` class to create a new release"""
+
     cur_release = class_uploader(
         insdb=insdb,
         release_tag=f"planck{year}",
