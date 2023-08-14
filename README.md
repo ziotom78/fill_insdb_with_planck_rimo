@@ -41,7 +41,7 @@ The repository contains a number of Python scripts, whose purpose can be underst
     password = bar
     ```
     
-    Once the script is executed successfully, here is the hierarchical tree of entities created by our script in InstrumentDB:
+    Once the script is executed successfully, here is the hierarchical tree of entities created by our script in InstrumentDB as if it were a nested structure of folders on a filesystem:
 
     ![](demo_tree_folders.png)
     
