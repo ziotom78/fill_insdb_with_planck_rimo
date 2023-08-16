@@ -10,6 +10,12 @@ The scripts in this repository represent one possible way to automatize the task
 
 **Note:** This repository is **not** part of any of the official Planck data releases, and the reference to Planck is just for didactical purposes. The usage of the Planck logo is done under a “fair use” clause, with the only purpose to show the possibility to “brand” a running InstrumentDB instance.
 
+The following video shows how to use this repository to fill an InstrumentDB instance:
+
+[![Video tutorial](http://img.youtube.com/vi/CAwFQhY5wPE/0.jpg)](http://www.youtube.com/watch?v=CAwFQhY5wPE "InstrumentDB Planck demo")
+
+https://youtu.be/CAwFQhY5wPE
+
 
 ## Purpose of this repository
 
@@ -29,9 +35,10 @@ The most fruitful way to study this repository is to pretend that the Planck is 
 The repository contains a number of Python scripts, whose purpose can be understood in terms of the following imaginary narrative:
 
 1.  To keep the design documents and the tables containing measured/estimated characteristics of the hardware, an “Instrument Model (IMo) Team” is gathering CAD files, Excel spreadsheets, FITS files, and whatever else in a centralized directory on a workstation used by the Planck collaboration. Anybody working on Planck can access this workstation and open the file they want.
+
 2. Since the true Planck collaboration already did the task of gathering the hardware information and published it on the [Planck Legacy Archive](https://pla.esac.esa.int/), we rely on the so-called RIMO (Reduced Instrument MOdel) files released by the collaboration and create the “centralized directory” of point 1. with the script `create_mock_files_from_PLA.py`. The script download the RIMO files and extract a subset of all the information, saving it in several files under the `mock_data` subfolder.
 
-2.  Once the first official data release is going to be published, the Planck team tags a new release named `planck2013` in the InstrumentDB instance. The script `create_planck2013_release.py` creates a hierarchical tree containing several sub-trees, which does not need to share the same structure with the folders on the workstation (point 1).
+3.  Before uploading any file, we must provide some *structure*, in the form of a hierarchical tree which splits the parts of the many instruments so that navigation is easier. The script `create_tree.py` generates a set of entities and sub-entities, which are still “empty” because no actual data file has been uploaded yet.
 
     Only at this stage we need a running copy of InstrumentDB. To connect to it, we need a username and password, which must be provided in file `credentials.ini`. It is not created when you clone the repository, so you have to use your favourite text editor to create it, visualized as if they were folders on a hard disk:
     
@@ -40,12 +47,17 @@ The repository contains a number of Python scripts, whose purpose can be underst
     username = foo
     password = bar
     ```
-    
-    Once the script is executed successfully, here is the hierarchical tree of entities created by our script in InstrumentDB as if it were a nested structure of folders on a filesystem:
+
+    Once `create_tree.py` is executed successfully, here is the hierarchical tree of entities created by our script in InstrumentDB as if it were a nested structure of folders on a filesystem:
 
     ![](demo_tree_folders.png)
     
-    The script creates all the folders and sub-folders using the [Web API](https://instrumentdb.readthedocs.io/en/latest/webapi.html) provided by InstrumentDB and the Python [requests](https://pypi.org/project/requests/) package. Then, it uploads all the data files from the Planck 2013 release that were produced by `create_mock_files_from_PLA.py` (point 1).
+    The script creates all the folders and sub-folders using the [Web API](https://instrumentdb.readthedocs.io/en/latest/webapi.html) provided by InstrumentDB and the Python [requests](https://pypi.org/project/requests/) package. 
+
+4.  Once the first official data release is going to be published, the Planck team tags a new release named `planck2013` in the InstrumentDB instance. The script `create_planck2013_release.py` creates a hierarchical tree containing several sub-trees, which does not need to share the same structure with the folders on the workstation (point 1).
+
+
+    The script gathers all the data files from the Planck 2013 release that were produced by `create_mock_files_from_PLA.py` (point 2) and uploads them in the right places within the tree created just before (point 3).
 
     The script tags the release `planck2013`, so that any simulation/data analysis code needing information about the instrument can use this tag to retrieve information about the instrument. For instance, the following path points to the averaged bandpass for the 30 GHz detectors:
     
@@ -61,7 +73,7 @@ The repository contains a number of Python scripts, whose purpose can be underst
     
     These paths do not correspond to real files on the computer where InstrumentDB is running; rather, they are identifiers that can be used through the [Web API interface](https://instrumentdb.readthedocs.io/en/latest/webapi.html).
 
-3.  Time passes, and the Planck team is ready for the new 2015 release! It turns out that a few characteristics of the instruments have been updated, thanks to the larger amount of data that has been acquired in the meantime, but other information released in 2013 is still up-to-date, e.g., the size of the telescope mirrors. The IMO team thus prepares a new script, `create_planck2015_release.py`, whose purpose is to inject the new information in the tree that was already created in 2013. InstrumentDB *does not overwrite* 2013 data files, but it stores the newer 2015 files alongside the older ones, which are still available. The script tags the new release `planck2015`.
+5.  Time passes, and the Planck team is ready for the new 2015 release! It turns out that a few characteristics of the instruments have been updated, thanks to the larger amount of data that has been acquired in the meantime, but other information released in 2013 is still up-to-date, e.g., the size of the telescope mirrors. The IMO team thus prepares a new script, `create_planck2015_release.py`, whose purpose is to inject the new information in the tree that was already created in 2013. InstrumentDB *does not overwrite* 2013 data files, but it stores the newer 2015 files alongside the older ones, which are still available. The script tags the new release `planck2015`.
 
     The script `create_planck2015_release.py` is considerably simpler than `create_planck2013_release.py`, because it must not create the tree of entities from scratch; however, it must know which data files need to be uploaded again and which files have not been updated.
     
@@ -84,7 +96,7 @@ The repository contains a number of Python scripts, whose purpose can be underst
     /releases/planck2015/payload/telescope-characteristics.xlsx
     ```
 
-4.  In 2018 and 2021, the Planck team publishes new data releases; in both cases, it creates one new scripts that uploads what needs to be uploaded and creates a new tag. The scripts are aptly named `create_planck2018_release.py` and `create_planck2021_release.py`, and the release tags are called `planck2018` and `planck2021`.
+6.  In 2018 and 2021, the Planck team publishes new data releases; in both cases, it creates one new scripts that uploads what needs to be uploaded and creates a new tag. The scripts are aptly named `create_planck2018_release.py` and `create_planck2021_release.py`, and the release tags are called `planck2018` and `planck2021`.
 
 
 This example assumes that the only data releases prepared by the Planck IMO team were the “official” ones. Of course, in a more realistic situation the IMO team would prepare “internal” data releases to be shared within the members of the collaboration.
@@ -112,6 +124,10 @@ The scripts are meant to be executed in the following order:
 # *not* need a running InstrumentDB instance to run
 # this.
 poetry run ./create_mock_files_from_PLA.py
+
+# Create the tree of entities; only use this
+# once you have started an InstrumentDB instance!
+poetry run ./create_tree.py
 
 # Produce the `planck2013` release; only use this
 # once you have started an InstrumentDB instance!
