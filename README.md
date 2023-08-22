@@ -23,7 +23,7 @@ This site was created with the purpose to show a possible way to use [Instrument
 
 - Setting up a hierarchical tree that hosts several information about the two instruments onboard the Planck spacecraft (LFI, Low Frequency Instrument, and HFI, High Frequency Instrument) as well as the telescope.
 - Fill the tree with the specifications of the instrument as they were published alongside the first Planck data release in 2013; for this, we use a subset of what was included in the so-called “RIMO files” (Reduced Instrument MOdel).
-- Add updated information about the instruments, using the newer RIMO files released for the 2015, 2018, and 2021 (BeyondPlanck) releases.
+- Add updated information about the instruments, using the newer RIMO files released for the 2015, 2018, and 2021 (NPIPE) releases.
 - Mark logic dependencies between different data files.
 - Properly document each information in the database with a “specification document”.
 
