@@ -5,6 +5,7 @@
 In this file we save all the functions and classes that
 are used by more than one script.
 """
+from __future__ import annotations
 
 from argparse import ArgumentParser
 from dataclasses import dataclass
@@ -15,7 +16,9 @@ from typing import Any
 
 import typing
 
-from httpinsdb import InstrumentDB, InstrumentDBError
+import numpy as np
+
+from libinsdb import RemoteInsDb, InstrumentDbConnectionError
 
 # MIME type used for the bandpass plots
 SVG_MIME_TYPE = "image/svg+xml"
@@ -153,7 +156,7 @@ def get_username_and_password() -> tuple[str, str]:
 
 def plot_bandpass(
     data_file_path: Path, output_file: typing.IO, image_format: str, instrument: str
-) -> None:
+) -> float:
     """Use Matplotlib to create a plot of a bandpass
 
     The plot is saved in SVG format and uploaded to InstrumentDB.
@@ -183,6 +186,13 @@ def plot_bandpass(
 
     canvas.print_figure(output_file, format=image_format)
 
+    # Compute the central frequency and the bandwidth and return
+    # them as a tuple
+    central_frequency = sum(data["wavelength"] * data["transmission"]) / sum(
+        data["transmission"]
+    )
+    return np.round(central_frequency, decimals=1)
+
 
 # We need an instance of `log` in the implementation
 # of the classe `ReleaseUploader` (see below)
@@ -205,7 +215,7 @@ class ReleaseUploader:
 
     def __init__(
         self,
-        insdb: InstrumentDB,
+        insdb: RemoteInsDb,
         release_tag: str,
         release_date: str,
         release_document_path: Path,
@@ -233,7 +243,9 @@ class ReleaseUploader:
 
         # Check that the release was not already uploaded
         try:
-            self.insdb.get(url=f"{self.insdb.server}/api/releases/{self.release_tag}")
+            self.insdb.get(
+                url=f"{self.insdb.server_address}/api/releases/{self.release_tag}"
+            )
 
             # If we reach this line, it means that the GET
             # request got completed successfully, and thus
@@ -241,8 +253,8 @@ class ReleaseUploader:
             raise ValueError(
                 f"error, release {self.release_tag} is already present in the database"
             )
-        except InstrumentDBError as err:
-            if err.status_code == 404:  # HTTP 404: not found
+        except InstrumentDbConnectionError as err:
+            if err.response.status_code == 404:  # HTTP 404: not found
                 # That's ok, we're happy that this release is not found
                 pass
             else:
@@ -275,10 +287,12 @@ class ReleaseUploader:
         quantity: str,
         parent_path: str,
         data_file_path: Path | None = None,
+        data_file_name: str | None = None,
         metadata: Any = None,
         plot_file: BufferedReader | None = None,
         plot_mime_type: str | None = None,
-    ):
+        dependencies: list[str] | None = None,
+    ) -> str:
         """Add a new data file to the current release
 
         This is a wrapper around the InstrumentDB.create_data_file method.
@@ -287,17 +301,20 @@ class ReleaseUploader:
         will be able to tag the new release.
         """
 
-        self.data_file_urls.append(
-            self.insdb.create_data_file(
-                quantity=quantity,
-                parent_path=parent_path,
-                data_file_path=data_file_path,
-                upload_date=self.release_date,
-                metadata=metadata,
-                plot_file=plot_file,
-                plot_mime_type=plot_mime_type,
-            )
+        url = self.insdb.create_data_file(
+            quantity=quantity,
+            parent_path=parent_path,
+            data_file_path=data_file_path,
+            data_file_name=data_file_name,
+            upload_date=self.release_date,
+            metadata=metadata,
+            plot_file=plot_file,
+            plot_mime_type=plot_mime_type,
+            dependencies=dependencies,
         )
+        self.data_file_urls.append(url)
+
+        return url
 
     def add_data_file_reference(self, release: str, path: str):
         """Add to the current release a reference to an older data file
@@ -367,6 +384,100 @@ class ReleaseUploader:
                 # HFI RIMO 2013 and 2018 do not have a focal plane specification
                 pass
 
+    def add_bandpasses(self):
+        rimo_center_freq_key = {
+            "LFI": "center_frequency_ghz",
+            "HFI": "center_wavelength_invcm",
+        }
+        for instrument, rimo_version, detectors_dict in [
+            ("LFI", self.lfi_rimo_version, LFI_DETECTORS),
+            ("HFI", self.hfi_rimo_version, HFI_DETECTORS),
+        ]:
+            cur_rimo_center_freq_key = rimo_center_freq_key[instrument]
+
+            instrument_mock_file_folder = MOCK_DATA_FOLDER / instrument / rimo_version
+            for cur_frequency in detectors_dict.keys():
+                log.info(
+                    "adding bandpasses for %s at %d GHz", instrument, cur_frequency
+                )
+                cur_frequency_path = f"{instrument}/frequency_{cur_frequency:03d}_ghz/"
+
+                # Channel-wide bandpass
+                with TemporaryFile("wb+") as plot_file:
+                    cur_data_file_path = (
+                        instrument_mock_file_folder / f"bandpass{cur_frequency:03d}.csv"
+                    )
+                    central_frequency = plot_bandpass(
+                        data_file_path=cur_data_file_path,
+                        output_file=plot_file,
+                        image_format="svg",
+                        instrument=instrument,
+                    )
+                    plot_file.seek(0)
+
+                    bandpass_url = self.add_data_file(
+                        quantity="bandpass",
+                        parent_path=cur_frequency_path,
+                        data_file_path=cur_data_file_path,
+                        plot_file=plot_file,
+                        plot_mime_type=SVG_MIME_TYPE,
+                    )
+
+                    self.add_data_file(
+                        quantity="rimo",
+                        parent_path=cur_frequency_path,
+                        data_file_name="rimo",
+                        metadata={
+                            "name": cur_frequency,
+                            cur_rimo_center_freq_key: central_frequency,
+                        },
+                        dependencies=[bandpass_url],
+                    )
+
+                # Detector bandpasses
+                for cur_detector in detectors_dict[cur_frequency]:
+                    if instrument == "LFI":
+                        file_name = f"bandpass_detector_{cur_detector}.csv"
+                    else:
+                        short_name = cur_detector.replace("-", "").upper()
+                        file_name = (
+                            f"bandpass_detector_{cur_frequency}-{short_name}.csv"
+                        )
+
+                    cur_data_file_path = instrument_mock_file_folder / file_name
+                    try:
+                        with TemporaryFile("wb+") as plot_file:
+                            central_frequency = plot_bandpass(
+                                data_file_path=cur_data_file_path,
+                                output_file=plot_file,
+                                image_format="svg",
+                                instrument=instrument,
+                            )
+                            plot_file.seek(0)
+
+                            cur_parent_path = f"{cur_frequency_path}{cur_detector}/"
+                            bandpass_url = self.add_data_file(
+                                quantity="bandpass",
+                                parent_path=cur_parent_path,
+                                data_file_path=cur_data_file_path,
+                                plot_mime_type=SVG_MIME_TYPE,
+                            )
+
+                            self.add_data_file(
+                                quantity="rimo",
+                                parent_path=cur_parent_path,
+                                data_file_name="rimo",
+                                metadata={
+                                    "name": cur_frequency,
+                                    cur_rimo_center_freq_key: central_frequency,
+                                },
+                                dependencies=[bandpass_url],
+                            )
+
+                    except FileNotFoundError:
+                        # HFI release 3.00 does not contain detector bandpasses
+                        pass
+
 
 class LaterReleaseUploader(ReleaseUploader):
     """Class to upload files from the 2015, 2018, and 2021 data releases
@@ -401,73 +512,9 @@ class LaterReleaseUploader(ReleaseUploader):
             path="payload/telescope_characteristics",
         )
 
-    def add_bandpasses(self):
-        for instrument, rimo_version, detectors_dict in [
-            ("LFI", self.lfi_rimo_version, LFI_DETECTORS),
-            ("HFI", self.hfi_rimo_version, HFI_DETECTORS),
-        ]:
-            instrument_mock_file_folder = MOCK_DATA_FOLDER / instrument / rimo_version
-            for cur_frequency in detectors_dict.keys():
-                log.info(
-                    "adding bandpasses for %s at %d GHz", instrument, cur_frequency
-                )
-                cur_frequency_path = f"{instrument}/frequency_{cur_frequency:03d}_ghz/"
-
-                # Channel-wide bandpass
-                with TemporaryFile("wb+") as plot_file:
-                    cur_data_file_path = (
-                        instrument_mock_file_folder / f"bandpass{cur_frequency:03d}.csv"
-                    )
-                    plot_bandpass(
-                        data_file_path=cur_data_file_path,
-                        output_file=plot_file,
-                        image_format="svg",
-                        instrument=instrument,
-                    )
-                    plot_file.seek(0)
-
-                    self.add_data_file(
-                        quantity="bandpass",
-                        parent_path=cur_frequency_path,
-                        data_file_path=cur_data_file_path,
-                        plot_file=plot_file,
-                        plot_mime_type=SVG_MIME_TYPE,
-                    )
-
-                # Detector bandpasses
-                for cur_detector in detectors_dict[cur_frequency]:
-                    if instrument == "LFI":
-                        file_name = f"bandpass_detector_{cur_detector}.csv"
-                    else:
-                        short_name = cur_detector.replace("-", "").upper()
-                        file_name = (
-                            f"bandpass_detector_{cur_frequency}-{short_name}.csv"
-                        )
-
-                    cur_data_file_path = instrument_mock_file_folder / file_name
-                    try:
-                        with TemporaryFile("wb+") as plot_file:
-                            plot_bandpass(
-                                data_file_path=cur_data_file_path,
-                                output_file=plot_file,
-                                image_format="svg",
-                                instrument=instrument,
-                            )
-                            plot_file.seek(0)
-
-                            self.add_data_file(
-                                quantity="bandpass",
-                                parent_path=f"{cur_frequency_path}{cur_detector}/",
-                                data_file_path=cur_data_file_path,
-                                plot_mime_type=SVG_MIME_TYPE,
-                            )
-                    except FileNotFoundError:
-                        # HFI release 3.00 does not contain detector bandpasses
-                        pass
-
 
 def create_release(
-    insdb: InstrumentDB,
+    insdb: RemoteInsDb,
     class_uploader,
     year: int,
     release_date: str,

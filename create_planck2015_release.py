@@ -15,7 +15,7 @@ from common import (
     get_username_and_password,
     LaterReleaseUploader,
 )
-from httpinsdb import InstrumentDB, InstrumentDBError
+from libinsdb import RemoteInsDb, InstrumentDbConnectionError
 
 log = configure_logger()
 
@@ -39,8 +39,8 @@ using a running InstrumentDB instance
 
     try:
         username, password = get_username_and_password()
-        insdb = InstrumentDB(
-            server_url=configuration.server,
+        insdb = RemoteInsDb(
+            server_address=configuration.server,
             username=username,
             password=password,
         )
@@ -56,10 +56,10 @@ using a running InstrumentDB instance
             hfi_rimo_version="2.00",
         )
 
-    except InstrumentDBError as err:
+    except InstrumentDbConnectionError as err:
         log.error(
             "error %d from %s",
-            err.status_code,
+            err.response.status_code,
             err.url,
         )
         print(err.message)

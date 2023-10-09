@@ -24,7 +24,7 @@ from common import (
     ReleaseUploader,
     SVG_MIME_TYPE,
 )
-from httpinsdb import InstrumentDB, InstrumentDBError
+from libinsdb import RemoteInsDb, InstrumentDbConnectionError
 
 log = configure_logger()
 
@@ -62,38 +62,7 @@ class Release2013Uploader(ReleaseUploader):
         )
 
         self.add_focal_plane_information()
-
-        for instrument, rimo_version, detectors_dict in [
-            ("LFI", self.lfi_rimo_version, LFI_DETECTORS),
-            ("HFI", self.hfi_rimo_version, HFI_DETECTORS),
-        ]:
-            instrument_mock_file_folder = MOCK_DATA_FOLDER / instrument / rimo_version
-            for cur_frequency in detectors_dict.keys():
-                log.info(
-                    "adding bandpasses for %s at %d GHz", instrument, cur_frequency
-                )
-                cur_frequency_path = f"{instrument}/frequency_{cur_frequency:03d}_ghz/"
-                cur_data_file_path = (
-                    instrument_mock_file_folder / f"bandpass{cur_frequency:03d}.csv"
-                )
-
-                with TemporaryFile("wb+") as plot_file:
-                    plot_bandpass(
-                        data_file_path=cur_data_file_path,
-                        output_file=plot_file,
-                        image_format="svg",
-                        instrument=instrument,
-                    )
-                    plot_file.seek(0)
-
-                    # Channel-wide bandpass
-                    self.add_data_file(
-                        quantity="bandpass",
-                        parent_path=cur_frequency_path,
-                        data_file_path=cur_data_file_path,
-                        plot_file=plot_file,
-                        plot_mime_type=SVG_MIME_TYPE,
-                    )
+        self.add_bandpasses()
 
 
 def main() -> None:
@@ -107,8 +76,8 @@ using a running InstrumentDB instance
 
     try:
         username, password = get_username_and_password()
-        insdb = InstrumentDB(
-            server_url=configuration.server,
+        insdb = RemoteInsDb(
+            server_address=configuration.server,
             username=username,
             password=password,
         )
@@ -124,10 +93,10 @@ using a running InstrumentDB instance
             hfi_rimo_version="1.10",
         )
 
-    except InstrumentDBError as err:
+    except InstrumentDbConnectionError as err:
         log.error(
             "error %d from %s",
-            err.status_code,
+            err.response.status_code,
             err.url,
         )
         print(err.message)

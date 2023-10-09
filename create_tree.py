@@ -11,7 +11,8 @@ from common import (
     HFI_DETECTORS,
     LFI_DETECTORS,
 )
-from httpinsdb import InstrumentDB, InstrumentDBError
+from libinsdb import RemoteInsDb, InstrumentDbConnectionError
+
 
 log = configure_logger()
 
@@ -23,7 +24,7 @@ TEXT_MIME_TYPE = "text/plain"
 
 
 def create_frequency_and_detector_entities(
-    insdb: InstrumentDB, instrument: str, detector_dict: dict[int, Any]
+    insdb: RemoteInsDb, instrument: str, detector_dict: dict[int, Any]
 ) -> None:
     """Create the leaves of the tree associated with frequencies and detectors
 
@@ -45,7 +46,7 @@ def create_frequency_and_detector_entities(
             )
 
 
-def create_tree_of_entities(insdb: InstrumentDB) -> None:
+def create_tree_of_entities(insdb: RemoteInsDb) -> None:
     insdb.create_entity(name="payload")
 
     insdb.create_entity(name="LFI")
@@ -63,7 +64,7 @@ def create_tree_of_entities(insdb: InstrumentDB) -> None:
 
 
 def create_format_spec_and_quantity(
-    insdb: InstrumentDB,
+    insdb: RemoteInsDb,
     quantity: str,
     parent_path: str,
     document_file_path: Path,
@@ -101,7 +102,7 @@ def create_format_spec_and_quantity(
     return (fmt_spec_url, quantity_url)
 
 
-def create_quantities(insdb: InstrumentDB) -> None:
+def create_quantities(insdb: RemoteInsDb) -> None:
     format_spec_folder = Path(__file__).parent / "format_specifications"
 
     create_format_spec_and_quantity(
@@ -147,10 +148,20 @@ def create_quantities(insdb: InstrumentDB) -> None:
             file_mime_type=CSV_MIME_TYPE,
         )
 
+    with (format_spec_folder / "rimo.txt").open("rb") as f:
+        rimo_format_spec_url = insdb.create_format_spec(
+            document_file=f,
+            document_ref="MOCK_DOCUMENT_REF_006",
+            document_title="Specification of the RIMO for HFI and LFI",
+            document_mime_type=TEXT_MIME_TYPE,
+            document_file_name="planck_rimo.txt",
+            file_mime_type=TEXT_MIME_TYPE,
+        )
+
     with (format_spec_folder / "reduced_focal_plane.txt").open("rb") as f:
         reduced_focal_plane_spec_url = insdb.create_format_spec(
             document_file=f,
-            document_ref="MOCK_DOCUMENT_REF_006",
+            document_ref="MOCK_DOCUMENT_REF_007",
             document_title="Specification of the focal plane (reduced)",
             document_file_name="planck_reduced_focal_plane.txt",
             document_mime_type=TEXT_MIME_TYPE,
@@ -160,7 +171,7 @@ def create_quantities(insdb: InstrumentDB) -> None:
     with (format_spec_folder / "full_focal_plane.txt").open("rb") as f:
         full_focal_plane_spec_url = insdb.create_format_spec(
             document_file=f,
-            document_ref="MOCK_DOCUMENT_REF_007",
+            document_ref="MOCK_DOCUMENT_REF_008",
             document_title="Specification of the focal plane (full)",
             document_file_name="planck_full_focal_plane.txt",
             document_mime_type=TEXT_MIME_TYPE,
@@ -194,6 +205,11 @@ def create_quantities(insdb: InstrumentDB) -> None:
                 parent_path=cur_frequency_path,
                 format_spec_url=bandpass_format_spec_url,
             )
+            insdb.create_quantity(
+                name="rimo",
+                parent_path=cur_frequency_path,
+                format_spec_url=rimo_format_spec_url,
+            )
 
             for detector_name in detector_dictionary[frequency]:
                 cur_detector_path = f"{cur_frequency_path}/{detector_name}/"
@@ -203,20 +219,27 @@ def create_quantities(insdb: InstrumentDB) -> None:
                     format_spec_url=bandpass_format_spec_url,
                 )
 
+                cur_detector_path = f"{cur_frequency_path}/{detector_name}/"
+                insdb.create_quantity(
+                    name="rimo",
+                    parent_path=cur_detector_path,
+                    format_spec_url=rimo_format_spec_url,
+                )
+
 
 def main() -> None:
     configuration = parse_connection_flags(
         description="""
 Create the tree of entities and quantities
-using a running InstrumentDB instance
+using a running RemoteInsDb instance
 """
     )
     log.info('Will connect to "%s"', configuration.server)
 
     try:
         username, password = get_username_and_password()
-        insdb = InstrumentDB(
-            server_url=configuration.server,
+        insdb = RemoteInsDb(
+            server_address=configuration.server,
             username=username,
             password=password,
         )
@@ -225,10 +248,10 @@ using a running InstrumentDB instance
 
         create_tree_of_entities(insdb=insdb)
         create_quantities(insdb=insdb)
-    except InstrumentDBError as err:
+    except InstrumentDbConnectionError as err:
         log.error(
             "error %d from %s: %s",
-            err.status_code,
+            err.response.status_code,
             err.url,
             err.message,
         )
