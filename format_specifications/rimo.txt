@@ -1,0 +1,6 @@
+﻿This is a *very* reduced version of the RIMO (Reduced Instrument MOdel)! It was included in this demo
+to show a couple of features of InstrumentDB:
+
+- Very simple data files can have no “file” at all and just store all their information in the `metadata` field.
+
+- InstrumentDB can track dependency relationships between data files. In this case, the bandwidth and the central frequency reported in the `metadata` field have been calcolated using the full band contained in the `bandpass` quantity. This dependency is properly tracked by the database.
