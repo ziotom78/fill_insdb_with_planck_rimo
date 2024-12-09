@@ -108,7 +108,7 @@ The scripts have been written using Python 3, and dependencies are handled using
 
 To run the script, install `poetry` and run the following command to download all the dependencies and create a virtual environment:
 
-    poetry init
+    poetry install
     
 To run any of the scripts in the folder (e.g., `create_planck2013_release.py`), run it with `poetry run`:
 
